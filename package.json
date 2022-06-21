@@ -1,5 +1,5 @@
 {
-  "name": "com.extra-nice.unidice-sdk",
+  "name": "com.unidice.sdk",
   "displayName": "Unidice SDK",
   "description": "The core plugin to connect with a Unidice or simulate one.",
   "version": "1.0.0-preview.0",
