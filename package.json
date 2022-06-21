@@ -1,0 +1,19 @@
+{
+  "name": "com.extra-nice.unidice-sdk",
+  "displayName": "Unidice SDK",
+  "description": "The core plugin to connect with a Unidice or simulate one.",
+  "version": "1.0.0-preview.0",
+  "unity": "2020.3",
+  "license": "GNU General Public License v3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ExtraNiceBV/Unidice-SDK.git"
+  },
+  "author": {
+    "name": "Extra Nice",
+    "email": "contact@extra-nice.net",
+    "url": "https://extra-nice.net"
+  },
+  "dependencies": {},
+  "keywords": [ ]
+}
