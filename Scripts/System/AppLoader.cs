@@ -2,11 +2,6 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityEngine.Localization.Settings;
-// Required so Async doesn't get stripped
-// ReSharper disable RedundantUsingDirective
-using UnityEngine.ResourceManagement.AsyncOperations;
-// ReSharper restore RedundantUsingDirective
 
 namespace Unidice.SDK.System
 {
@@ -16,7 +11,8 @@ namespace Unidice.SDK.System
         [SerializeField] private TMP_Text outputText;
 
         public static bool Simulate => !Application.isMobilePlatform;
-
+        public AppLoaderLoadStep[] loadSteps;
+        
         public void Awake()
         {
             Application.logMessageReceived += OnLog;
@@ -27,10 +23,12 @@ namespace Unidice.SDK.System
         {
             DontDestroyOnLoad(gameObject);
 
-
-            Debug.Log("Loading localization...");
-            await LocalizationSettings.InitializationOperation;
-            Debug.Log("..done loading localization.");
+            foreach (var loadStep in loadSteps)
+            {
+                Debug.Log($"Loading {loadStep.name}...");
+                await loadStep.Execute(gameObject.GetCancellationTokenOnDestroy());
+                Debug.Log($"...done loading {loadStep.name}.");
+            }
 
             if (Simulate)
             // Load simulator
