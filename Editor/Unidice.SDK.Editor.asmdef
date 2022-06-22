@@ -1,6 +1,6 @@
 {
     "name": "Unidice.SDK.Editor",
-    "rootNamespace": "",
+    "rootNamespace": "Unidice.SDK",
     "references": [
         "GUID:343deaaf83e0cee4ca978e7df0b80d21",
         "GUID:bdf5ac0dedda7d44590c05e914814e4a"
