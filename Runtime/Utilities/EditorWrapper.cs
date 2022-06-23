@@ -1,5 +1,7 @@
 ﻿#if UNITY_EDITOR
 using UnityEditor;
+#else
+using System;
 #endif
 using System.Collections.Generic;
 using System.Diagnostics;

@@ -25,9 +25,9 @@ namespace Unidice.SDK.System
 
             foreach (var loadStep in loadSteps)
             {
-                Debug.Log($"Loading {loadStep.name}...");
+                Debug.Log($"Loading {loadStep.Label}...");
                 await loadStep.Execute(gameObject.GetCancellationTokenOnDestroy());
-                Debug.Log($"...done loading {loadStep.name}.");
+                Debug.Log($"...done loading {loadStep.Label}");
             }
 
             if (Simulate)
