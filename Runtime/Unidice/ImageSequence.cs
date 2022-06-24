@@ -6,6 +6,8 @@ namespace Unidice.SDK.Unidice
     [CreateAssetMenu(menuName = "Unidice/Image Sequence")]
     public class ImageSequence : ScriptableObject
     {
+        public const int IMAGE_PIXEL_SIZE = 240;
+    
         public enum LoopMode
         {
             Once,
@@ -21,5 +23,6 @@ namespace Unidice.SDK.Unidice
         public LoopMode loop;
         public Vector2Int size = new Vector2Int(240, 240);
         [NonSerialized] public int[] indices;
+        public int Frames => Mathf.Max(1, animation.Length);
     }
 }

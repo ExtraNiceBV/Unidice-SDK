@@ -17,10 +17,18 @@ namespace Unidice.SDK.Unidice
         IEnumerable<Texture2D> GetImages();
 
         /// <summary>
-        /// Synchronize a list of <see cref="ImageSequence"/> with the Unidice. Loads and unloads images as needed. When called multiple times, will queue up to one request. All further requests will hold until the queued request was processed.
+        /// Synchronize a list of <see cref="ImageSequence"/> with the Unidice. Loads and unloads images to match the list. When called multiple times, will queue up to one request. All further requests will hold until the queued request was processed.
         /// </summary>
         /// <param name="sequences">A list of <see cref="ImageSequence"/> to load.</param>
         /// <param name="progress">Reports progress in percent.</param>
-        UniTask SynchronizeSequence(IEnumerable<ImageSequence> sequences, IProgress<float> progress, CancellationToken cancellationToken);
+        UniTask SynchronizeImagesSequence(IEnumerable<ImageSequence> sequences, IProgress<float> progress, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Make sure a list of <see cref="ImageSequence"/> are loaded on the Unidice. Loads and unloads images as needed, but doesn't remove unlisted images (as <see cref="SynchronizeImagesSequence"/> would). When called multiple times, will queue up to one request. All further requests will hold until the queued request was processed.
+        /// This is useful if you want to make sure certain sequences are loaded, without unloading all the game assets.
+        /// </summary>
+        /// <param name="sequences">A list of <see cref="ImageSequence"/> to load.</param>
+        /// <param name="progress">Reports progress in percent.</param>
+        UniTask LoadImagesSequence(IEnumerable<ImageSequence> sequences, IProgress<float> progress, CancellationToken cancellationToken);
     }
 }

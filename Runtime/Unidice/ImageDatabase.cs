@@ -15,10 +15,9 @@ namespace Unidice.SDK.Unidice
     [Serializable]
     public class ImageDatabase : IImageDatabase
     {
-        private const int DIMENSIONS = 240;
-
+        public const int MAX_IMAGES = 75;
         private static Color32 _clearColor = Color.black;
-        private static Color32[] _pixelsClearTexture = new Color32[DIMENSIONS * DIMENSIONS].Select(c => _clearColor).ToArray();
+        private static Color32[] _pixelsClearTexture = new Color32[ImageSequence.IMAGE_PIXEL_SIZE * ImageSequence.IMAGE_PIXEL_SIZE].Select(c => _clearColor).ToArray();
         private static Material _blitBackgroundMaterial;
         private static Material _blitLayerMaterial;
         [SerializeField] private Texture2D[] images;
@@ -28,62 +27,86 @@ namespace Unidice.SDK.Unidice
         public int Count { get; private set; }
         public bool Busy { get; private set; }
 
-        private readonly List<int> _synchronizingQueue = new List<int>(); // Stores ids for sync requests
-        private UnityEvent OnSynchronizeFinished { get; } = new UnityEvent();
+        private readonly List<int> _operationQueue = new List<int>(); // Stores ids for sync requests
+        private UnityEvent OnOperationFinished { get; } = new UnityEvent();
 
 
-        public async UniTask SynchronizeSequence(IEnumerable<ImageSequence> sequences, IProgress<float> progress, CancellationToken cancellationToken)
+        public async UniTask SynchronizeImagesSequence(IEnumerable<ImageSequence> sequences, IProgress<float> progress, CancellationToken cancellationToken)
+        {
+            async UniTask Operation(CancellationToken cancellationToken) => await SynchronizeSequence_Internal(sequences.ToArray(), true, progress, cancellationToken);
+
+            await QueueOperation(Operation, progress, cancellationToken);
+        }
+
+        public async UniTask LoadImagesSequence(IEnumerable<ImageSequence> sequences, IProgress<float> progress, CancellationToken cancellationToken)
+        {
+            async UniTask Operation(CancellationToken cancellationToken) => await SynchronizeSequence_Internal(sequences.ToArray(), false, progress, cancellationToken);
+
+            await QueueOperation(Operation, progress, cancellationToken);
+        }
+
+        private async UniTask QueueOperation(AsyncAction operation, IProgress<float> progress, CancellationToken cancellationToken)
         {
             // If there is already one queued, don't queue again, but wait until the latest is complete
-            if (_synchronizingQueue.Count > 1)
+            if (_operationQueue.Count > 1)
             {
-                var last = _synchronizingQueue.Last();
-                while (_synchronizingQueue.Contains(last))
+                var last = _operationQueue.Last();
+                while (_operationQueue.Contains(last))
                 {
                     progress?.Report(0);
-                    await OnSynchronizeFinished.GetAsyncEventHandler(cancellationToken).OnInvokeAsync(); // Wait until a sync is complete
+                    await OnOperationFinished.GetAsyncEventHandler(cancellationToken)
+                        .OnInvokeAsync(); // Wait until a sync is complete
                 }
+
                 return;
             }
 
             var syncId = GetNewSyncId();
-            _synchronizingQueue.Add(syncId);
+            _operationQueue.Add(syncId);
 
-            if (_synchronizingQueue.Count > 1) // including new id
+            if (_operationQueue.Count > 1) // including new id
             {
-                Debug.Log($"Waiting for {_synchronizingQueue.First()} to finish...");
+                Debug.Log($"Waiting for {_operationQueue.First()} to finish...");
                 progress?.Report(0);
-                await OnSynchronizeFinished.GetAsyncEventHandler(cancellationToken).OnInvokeAsync(); // After synchronization is complete, run it again
+                await OnOperationFinished.GetAsyncEventHandler(cancellationToken)
+                    .OnInvokeAsync(); // After synchronization is complete, run it again
             }
+
             //var progress = Progress.Create<float>(p => Debug.Log($"Synchronizing... {p:P0}"));
             try
             {
-                var array = sequences.ToArray();
-                await SynchronizeSequence_Internal(array, progress, cancellationToken);
+                await operation(cancellationToken);
             }
             catch (Exception e)
             {
-                Debug.LogError($"Exception while compiling sequences.");
                 Debug.LogException(e);
+                Debug.LogError($"Exception while running operation.");
             }
 
-            _synchronizingQueue.Remove(syncId);
-            OnSynchronizeFinished.Invoke();
+            _operationQueue.Remove(syncId);
+            OnOperationFinished.Invoke();
         }
 
         private int GetNewSyncId()
         {
             int result = 0;
-            while (result == 0 || _synchronizingQueue.Contains(result)) result = Random.Range(1, int.MaxValue);
+            while (result == 0 || _operationQueue.Contains(result)) result = Random.Range(1, int.MaxValue);
             return result;
         }
 
-        private async UniTask SynchronizeSequence_Internal(IEnumerable<ImageSequence> sequences, IProgress<float> progress, CancellationToken cancellationToken)
+        private async UniTask SynchronizeSequence_Internal(IEnumerable<ImageSequence> sequences, bool removeUnused, IProgress<float> progress, CancellationToken cancellationToken)
         {
             var newSequences = sequences.ToArray();
+            var imageCount = newSequences.Sum(s=>s.Frames);
+            if (imageCount > MAX_IMAGES) throw new Exception($"Tried to load more images ({imageCount}) than possible ({MAX_IMAGES}).");
+
             var loadedSequences = _usage.Where(u => u != null).SelectMany(u => u).Distinct().ToArray();
-            var toUnload = loadedSequences.Except(newSequences).ToArray();
             var toLoad = newSequences.Except(loadedSequences).ToArray();
+
+            var totalNeeded = loadedSequences.Sum(s => s.Frames) + toLoad.Sum(s => s.Frames);
+            var toUnload = removeUnused ? loadedSequences.Except(newSequences).ToArray() :
+                totalNeeded < MAX_IMAGES ? Array.Empty<ImageSequence>() :
+                loadedSequences.Except(newSequences).Take(totalNeeded - MAX_IMAGES).ToArray();
 
             var total = toLoad.Length + toUnload.Length;
             var i = 0;
@@ -140,7 +163,7 @@ namespace Unidice.SDK.Unidice
                 image.anisoLevel = 4;
                 if (!_indices.TryGetValue(hash, out var index))
                 {
-                    var texture = Convert(stack, sequence.size.x, sequence.size.y);
+                    var texture = Convert(stack, ImageSequence.IMAGE_PIXEL_SIZE, ImageSequence.IMAGE_PIXEL_SIZE);
                     texture.name = image.name;
 
                     index = Array.IndexOf(images, null);
@@ -273,9 +296,9 @@ namespace Unidice.SDK.Unidice
             var rt = RenderTexture.GetTemporary(newWidth, newHeight, 16, GraphicsFormat.R8G8B8A8_SRGB, 8);
             rt.filterMode = FilterMode.Bilinear;
             RenderTexture.active = rt;
-            newWidth = Mathf.Clamp(newWidth, 0, DIMENSIONS);
-            newHeight = Mathf.Clamp(newHeight, 0, DIMENSIONS);
-            var nTex = new Texture2D(DIMENSIONS, DIMENSIONS);
+            newWidth = Mathf.Clamp(newWidth, 0, ImageSequence.IMAGE_PIXEL_SIZE);
+            newHeight = Mathf.Clamp(newHeight, 0, ImageSequence.IMAGE_PIXEL_SIZE);
+            var nTex = new Texture2D(ImageSequence.IMAGE_PIXEL_SIZE, ImageSequence.IMAGE_PIXEL_SIZE);
             nTex.SetPixels32(_pixelsClearTexture);
             nTex.anisoLevel = 4;
             nTex.filterMode = FilterMode.Bilinear;
@@ -292,8 +315,8 @@ namespace Unidice.SDK.Unidice
                     Graphics.Blit(source, rt, _blitLayerMaterial);
                 }
 
-            var marginX = DIMENSIONS / 2 - newWidth / 2;
-            var marginY = DIMENSIONS / 2 - newHeight / 2;
+            var marginX = ImageSequence.IMAGE_PIXEL_SIZE / 2 - newWidth / 2;
+            var marginY = ImageSequence.IMAGE_PIXEL_SIZE / 2 - newHeight / 2;
             nTex.ReadPixels(new Rect(0, 0, newWidth, newHeight), marginX, marginY);
             nTex.Apply();
             RenderTexture.active = null;
