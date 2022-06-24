@@ -8,9 +8,6 @@ namespace Unidice.SDK.Unidice
 {
     public interface IImageDatabase
     {
-        [Obsolete("Use Synchronize sequence instead and pass all sequences in use at once.")]
-        UniTask LoadSequence(ImageSequence sequence, IProgress<float> progress = null, CancellationToken cancellationToken = new CancellationToken());
-        
         /// <summary>
         /// Get all images stored on the Unidice.
         /// </summary>

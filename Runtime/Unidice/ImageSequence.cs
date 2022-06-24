@@ -21,7 +21,6 @@ namespace Unidice.SDK.Unidice
         public Texture2D[] overlayLayers;
         public float fps = 12;
         public LoopMode loop;
-        public Vector2Int size = new Vector2Int(240, 240);
         [NonSerialized] public int[] indices;
         public int Frames => Mathf.Max(1, animation.Length);
     }

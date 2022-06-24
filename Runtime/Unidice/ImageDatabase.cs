@@ -124,12 +124,6 @@ namespace Unidice.SDK.Unidice
             progress?.Report(1);
         }
 
-        [Obsolete("Use Synchronize sequence instead and pass all sequences in use at once.")]
-        public async UniTask LoadSequence(ImageSequence sequence, IProgress<float> progress, CancellationToken cancellationToken)
-        {
-            await LoadSequence(sequence, progress, cancellationToken, true);
-        }
-
         private async UniTask LoadSequence(ImageSequence sequence, IProgress<float> progress, CancellationToken cancellationToken, bool dummy = false)
         {
             if (!sequence) Debug.LogError("Sequence is null.");
