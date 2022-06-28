@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Unidice.SDK.Unidice
@@ -6,6 +7,18 @@ namespace Unidice.SDK.Unidice
     [CreateAssetMenu(menuName = "Unidice/Image Sequence")]
     public class ImageSequence : ScriptableObject
     {
+        public static ImageSequence Create(string name, Texture2D[] animation, Texture2D[] backgroundLayers = null, Texture2D[] overlayLayers = null, LoopMode loop = LoopMode.Loop, int fps = 12)
+        {
+            var obj = CreateInstance<ImageSequence>();
+            obj.name = name;
+            obj.animation = animation;
+            obj.backgroundLayers = backgroundLayers ?? Array.Empty<Texture2D>();
+            obj.overlayLayers = overlayLayers ?? Array.Empty<Texture2D>();
+            obj.loop = loop;
+            obj.fps = fps;
+            return obj;
+        }
+
         public const int IMAGE_PIXEL_SIZE = 240;
     
         public enum LoopMode
@@ -16,12 +29,18 @@ namespace Unidice.SDK.Unidice
             Random
         }
 
-        public Texture2D[] backgroundLayers;
-        public Texture2D[] animation;
-        public Texture2D[] overlayLayers;
-        public float fps = 12;
-        public LoopMode loop;
-        [NonSerialized] public int[] indices;
-        public int Frames => Mathf.Max(1, animation.Length);
+        [SerializeField] private Texture2D[] backgroundLayers;
+        [SerializeField] private Texture2D[] animation;
+        [SerializeField] private Texture2D[] overlayLayers;
+        [SerializeField] private float fps = 12;
+        [SerializeField] private LoopMode loop;
+
+        public IReadOnlyList<Texture2D> BackgroundLayers => backgroundLayers;
+        public IReadOnlyList<Texture2D> Animation => animation;
+        public IReadOnlyList<Texture2D> OverlayLayers => overlayLayers;
+        public float FPS => fps;
+        public LoopMode Loop => loop;
+        [field: NonSerialized] public IReadOnlyList<int> Indices { get; internal set; }
+        [field: NonSerialized] public IReadOnlyList<Texture2D> Frames { get; internal set; }
     }
 }

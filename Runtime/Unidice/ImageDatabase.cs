@@ -15,15 +15,17 @@ namespace Unidice.SDK.Unidice
     [Serializable]
     public class ImageDatabase : IImageDatabase
     {
-        public const int MAX_IMAGES = 75;
+        public const int MAX_IMAGES = 80;
         private static Color32 _clearColor = Color.black;
         private static Color32[] _pixelsClearTexture = new Color32[ImageSequence.IMAGE_PIXEL_SIZE * ImageSequence.IMAGE_PIXEL_SIZE].Select(c => _clearColor).ToArray();
         private static Material _blitBackgroundMaterial;
         private static Material _blitLayerMaterial;
-        [SerializeField] private Texture2D[] images;
-        private Dictionary<Hash128, int> _indices; // Texture hash => image index
-        private List<ImageSequence>[] _usage;
-        
+        [SerializeField] private Texture2D[] loadedImages;
+        private Dictionary<Texture2D, int> _indices; // Texture hash => image index
+        private List<ImageSequence>[] _usage; // for each image index, a list of sequences that use the image
+        private Dictionary<Texture2D, Hash128> _hashes; // Texture => image hash
+        private Dictionary<Hash128, Texture2D> _images; // Image hash => texture
+
         public int Count { get; private set; }
         public bool Busy { get; private set; }
 
@@ -96,47 +98,137 @@ namespace Unidice.SDK.Unidice
 
         private async UniTask SynchronizeSequence_Internal(IEnumerable<ImageSequence> sequences, bool removeUnused, IProgress<float> progress, CancellationToken cancellationToken)
         {
-            var newSequences = sequences.ToArray();
-            var imageCount = newSequences.Sum(s=>s.Frames);
-            if (imageCount > MAX_IMAGES) throw new Exception($"Tried to load more images ({imageCount}) than possible ({MAX_IMAGES}).");
-
-            var loadedSequences = _usage.Where(u => u != null).SelectMany(u => u).Distinct().ToArray();
-            var toLoad = newSequences.Except(loadedSequences).ToArray();
-
-            var totalNeeded = loadedSequences.Sum(s => s.Frames) + toLoad.Sum(s => s.Frames);
-            var toUnload = removeUnused ? loadedSequences.Except(newSequences).ToArray() :
-                totalNeeded < MAX_IMAGES ? Array.Empty<ImageSequence>() :
-                loadedSequences.Except(newSequences).Take(totalNeeded - MAX_IMAGES).ToArray();
-
-            var total = toLoad.Length + toUnload.Length;
+            var requiredSequences = sequences.ToArray();
+            var toRender = requiredSequences.Where(s => s.Frames == null).ToArray();
             var i = 0;
+
+            // Render the sequences and store the rendered frames in each sequence
+            // This is fairly expensive, but okay if called sparingly
+            foreach (var sequence in toRender)
+            {
+                await RenderSequence(sequence, Progress.Create<float>(p => progress?.Report((i + p) / toRender.Length / 3)), cancellationToken);
+                i++;
+                if (i % 5 == 0) await UniTask.Yield(cancellationToken);
+            }
+
+            // Determine what needs to be loaded and unloaded
+            // This looks expensive, but with a set of no more than 100 images that's neglectable
+            var loadedSequences = _usage.Where(u => u != null).SelectMany(u => u).ToArray();
+            var loadedFrames = loadedSequences.SelectMany(s => s.Frames).ToArray();
+            var toLoad = requiredSequences.Except(loadedSequences).ToArray();
+            var framesToLoad = toLoad.SelectMany(s => s.Frames);
+            var requiredFrames = requiredSequences.SelectMany(s => s.Frames).Distinct().ToArray();  // Distinct and Union works, because identical renders use the same texture via hashes
+            var unloadableFrames = loadedFrames.Except(requiredFrames).ToList();
+
+            if (requiredFrames.Length > MAX_IMAGES) throw new Exception($"Tried to load more images ({requiredFrames.Length}) than possible ({MAX_IMAGES}).");
+
+            var unload = new HashSet<ImageSequence>();
+            if (removeUnused)
+            {
+                var unusedSequences = loadedSequences.Except(requiredSequences);
+                unload.AddRangeArray(unusedSequences);
+            }
+            else
+            {
+                var framesThatWillBeUsed = loadedFrames.Union(framesToLoad);
+                var neededToUnload = framesThatWillBeUsed.Count() - MAX_IMAGES;
+                int count = 0;
+                while (count < neededToUnload)
+                {
+                    if (unloadableFrames.Count == 0) throw new Exception("This should have been caught by the previous exception.");
+                    var frame = unloadableFrames[0];
+                    var index = _indices[frame];
+                    var unloadableSequences = _usage[index];
+                    Debug.Log($"To unload {frame.name}, we have to unload the following sequences:\n{unloadableSequences.Select(s => s.name).Aggregate((a, b) => $"{a}\n{b}")}");
+                    unload.AddRangeArray(unloadableSequences);
+                    unloadableFrames.Remove(frame);
+                    count++;
+                }
+            }
+
+            var total = toLoad.Length + unload.Count;
+            i = 0;
+
+            foreach (var sequence in unload)
+            {
+                await UnloadSequence(sequence, Progress.Create<float>(p => progress?.Report((i + p) / total *2/3)), cancellationToken);
+                i++;
+            }
             foreach (var sequence in toLoad)
             {
-                await LoadSequence(sequence, Progress.Create<float>(p => progress?.Report((i + p) / total)), cancellationToken, true);
+                await LoadSequence(sequence, Progress.Create<float>(p => progress?.Report((i + p) / total *2/3)), cancellationToken);
                 i++;
             }
 
-            foreach (var sequence in toUnload)
-            {
-                await UnloadSequence(sequence, Progress.Create<float>(p => progress?.Report((i + p) / total)), cancellationToken);
-                i++;
-            }
             progress?.Report(1);
         }
 
-        private async UniTask LoadSequence(ImageSequence sequence, IProgress<float> progress, CancellationToken cancellationToken, bool dummy = false)
+        private async UniTask RenderSequence(ImageSequence sequence, IProgress<float> progress, CancellationToken cancellationToken)
+        {
+            var i = 0;
+            var length = Mathf.Max(1, sequence.Animation.Count);
+            if (sequence.Frames != null) return;
+
+            var frames = new Texture2D[length];
+            foreach (var image in sequence.Animation)
+            {
+                if (!image) Debug.LogError($"Image is null in sequence {sequence.name}.");
+                Profiler.BeginSample("Render animation sequence frame");
+
+                // Render texture
+                var frame = RenderFrame(sequence, image);
+
+                // Compute hash if needed
+                if (!_hashes.TryGetValue(frame, out var hash))
+                {
+                    HashUtilities.ComputeHash128(frame.GetRawTextureData(), ref hash);
+                    _hashes.Add(frame, hash);
+                }
+
+                // Check if texture has been created before (and use that one)
+                if (_images.TryGetValue(hash, out var hashedTexture))
+                {
+                    frame = hashedTexture;
+                }
+                else
+                {
+                    _images.Add(hash, frame);
+                }
+
+                frames[i] = frame;
+                Profiler.EndSample();
+
+                i++;
+                progress.Report(1f * i / length);
+                if (i % 5 == 0) await UniTask.Yield(cancellationToken); // Do 5 per frame
+            }
+            sequence.Frames = frames;
+            progress.Report(1);
+        }
+
+        private Texture2D RenderFrame(ImageSequence sequence, Texture2D image)
+        {
+            var stack = GetStack(sequence, image);
+            if (!CheckReadable(stack)) return null;
+            var texture = Convert(stack, ImageSequence.IMAGE_PIXEL_SIZE, ImageSequence.IMAGE_PIXEL_SIZE);
+            texture.name = image.name;
+            texture.anisoLevel = 4;
+            return texture;
+        }
+
+        private async UniTask LoadSequence(ImageSequence sequence, IProgress<float> progress, CancellationToken cancellationToken)
         {
             if (!sequence) Debug.LogError("Sequence is null.");
-            else if (sequence.animation == null) Debug.LogError("Sequence animation is null.");
-            else if (images == null) throw new Exception("Image Database has not been initialized.");
+            else if (sequence.Animation == null) Debug.LogError("Sequence animation is null.");
+            else if (loadedImages == null) throw new Exception("Image Database has not been initialized.");
 
             await UniTask.WaitUntil(() => !Busy, cancellationToken: cancellationToken);
 
             Busy = true;
 
-            var amount = sequence.animation.Length;
+            var amount = sequence.Frames.Count;
 
-            if (sequence.indices != null)
+            if (sequence.Indices != null)
             {
                 // Sequence has already been parsed. This can happen after restarting. Still should get the updated indices, just in case.
             }
@@ -145,69 +237,63 @@ namespace Unidice.SDK.Unidice
             var indices = new int[amount];
 
             var i = 0;
-            foreach (var image in sequence.animation)
+            foreach (var frame in sequence.Frames)
             {
-                if (!image) Debug.LogError($"Image is null in sequence {sequence.name}.");
+                if (!frame) Debug.LogError($"Frame is null in sequence {sequence.name}.");
+            
 
-                Profiler.BeginSample("Hashing");
-                var stack = GetStack(sequence, image);
-                if (!CheckReadable(stack)) continue;
-                var hash = CalcHash(stack);
-                Profiler.EndSample();
-                image.anisoLevel = 4;
-                if (!_indices.TryGetValue(hash, out var index))
+                if (!_indices.TryGetValue(frame, out var index))
                 {
-                    var texture = Convert(stack, ImageSequence.IMAGE_PIXEL_SIZE, ImageSequence.IMAGE_PIXEL_SIZE);
-                    texture.name = image.name;
-
-                    index = Array.IndexOf(images, null);
-                    images[index] = texture;
-
+                    index = Array.IndexOf(loadedImages, null);
+                    loadedImages[index] = frame;
+            
                     // Add to device
-                    await UniTask.Delay(TimeSpan.FromSeconds(0.01f), cancellationToken: cancellationToken);
+                    await UniTask.Delay(TimeSpan.FromSeconds(0.05f), cancellationToken: cancellationToken);
                     //Debug.Log($"Loaded {image.name} at index {index} as part of sequence {sequence.name}.".Colored(Color.gray));
-
-                    _indices.Add(hash, index);
+            
+                    _indices.Add(frame, index);
                     Count++;
                 }
                 if (_usage[index] == null) _usage[index] = new List<ImageSequence> { sequence };
                 else _usage[index].Add(sequence);
-
+            
                 indices[i++] = index;
                 progress?.Report((float)i / amount);
             }
 
-            sequence.indices = indices;
+            sequence.Indices = indices;
 
             Busy = false;
         }
 
         public IEnumerable<Texture2D> GetImages()
         {
-            return images.Where(i => i);
+            return loadedImages.Where(i => i);
         }
 
         public void Initialize()
         {
             _blitBackgroundMaterial = new Material(Shader.Find("Shader Graphs/UnidiceBlitBackground"));
             _blitLayerMaterial = new Material(Shader.Find("Shader Graphs/UnidiceBlitLayer"));
-            images = new Texture2D[100];
-            _usage = new List<ImageSequence>[100];
-            _indices = new Dictionary<Hash128, int>(100);
+            loadedImages = new Texture2D[MAX_IMAGES];
+            _usage = new List<ImageSequence>[MAX_IMAGES];
+            _indices = new Dictionary<Texture2D, int>(MAX_IMAGES);
+            _hashes = new Dictionary<Texture2D, Hash128>(MAX_IMAGES);
+            _images = new Dictionary<Hash128, Texture2D>(MAX_IMAGES);
         }
 
         private async UniTask UnloadSequence(ImageSequence sequence, IProgress<float> progress, CancellationToken cancellationToken)
         {
             if (!sequence) Debug.LogError("Sequence is null.");
-            else if (sequence.animation == null) Debug.LogError("Sequence animation is null.");
-            else if (images == null) throw new Exception("Image Database has not been initialized.");
+            else if (sequence.Animation == null) Debug.LogError("Sequence animation is null.");
+            else if (loadedImages == null) throw new Exception("Image Database has not been initialized.");
 
             if (Busy) await UniTask.WaitUntil(() => !Busy, cancellationToken: cancellationToken);
 
             Busy = true;
 
-            var indices = sequence.indices;
-            sequence.indices = null;
+            var indices = sequence.Indices;
+            sequence.Indices = null;
 
             var i = 0;
             foreach (var index in indices)
@@ -226,13 +312,13 @@ namespace Unidice.SDK.Unidice
                         if (pair.Value == index) _indices.Remove(pair.Key);
                     }
 
-                    Debug.Log($"Unloaded image {images[index].name} at index {index}. (no longer in use)".Colored(Color.gray));
-                    images[index] = null;
+                    Debug.Log($"Unloaded image {loadedImages[index].name} at index {index}. (no longer in use)".Colored(Color.gray));
+                    loadedImages[index] = null;
                     Count--;
                 }
 
                 i++;
-                progress?.Report((float)i / indices.Length);
+                progress?.Report((float)i / indices.Count);
             }
 
             Busy = false;
@@ -266,20 +352,27 @@ namespace Unidice.SDK.Unidice
             return hash;
         }
 
+        private Hash128 CalcHash(Texture2D texture)
+        {
+            var hash = new Hash128();
+            HashUtilities.ComputeHash128(texture.GetRawTextureData(), ref hash);
+            return hash;
+        }
+
         private Texture2D[] GetStack(ImageSequence sequence, Texture2D image)
         {
             // Concatenate all backgroundLayers, the image, and then all overlayLayers
-            var size = (sequence.backgroundLayers?.Length ?? 0) + 1 + (sequence.overlayLayers?.Length ?? 0);
+            var size = (sequence.BackgroundLayers?.Count ?? 0) + 1 + (sequence.OverlayLayers?.Count ?? 0);
             var stack = new Texture2D[size];
             var i = 0;
-            if (sequence.backgroundLayers != null)
-                foreach (var img in sequence.backgroundLayers)
+            if (sequence.BackgroundLayers != null)
+                foreach (var img in sequence.BackgroundLayers)
                     stack[i++] = img;
 
             stack[i++] = image;
 
-            if (sequence.overlayLayers != null)
-                foreach (var img in sequence.overlayLayers)
+            if (sequence.OverlayLayers != null)
+                foreach (var img in sequence.OverlayLayers)
                     stack[i++] = img;
 
             return stack;
@@ -320,7 +413,7 @@ namespace Unidice.SDK.Unidice
 
         public Texture2D GetTexture(int index)
         {
-            return images[index];
+            return loadedImages[index];
         }
     }
 }
