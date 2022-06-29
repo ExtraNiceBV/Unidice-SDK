@@ -96,9 +96,8 @@ namespace Unidice.SDK.Unidice
             return result;
         }
 
-        private async UniTask SynchronizeSequence_Internal(IEnumerable<ImageSequence> sequences, bool removeUnused, IProgress<float> progress, CancellationToken cancellationToken)
+        private async UniTask SynchronizeSequence_Internal(ImageSequence[] requiredSequences, bool removeUnused, IProgress<float> progress, CancellationToken cancellationToken)
         {
-            var requiredSequences = sequences.ToArray();
             var toRender = requiredSequences.Where(s => s.Frames == null).ToArray();
             var i = 0;
 
