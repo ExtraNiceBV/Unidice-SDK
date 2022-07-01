@@ -9,11 +9,6 @@ namespace Unidice.SDK.Unidice
     public interface IImageDatabase
     {
         /// <summary>
-        ///     The quality of jpg compression when loading images to the Unidice. From 0 to 100. Default is 75.
-        /// </summary>
-        int EncodeQuality { get; set; }
-
-        /// <summary>
         ///     True while an operation is ongoing.
         /// </summary>
         bool Busy { get; }
@@ -24,14 +19,19 @@ namespace Unidice.SDK.Unidice
         int Count { get; }
 
         /// <summary>
-        ///     The amount of bytes used by images.
-        /// </summary>
-        int BytesInUse { get; }
-
-        /// <summary>
         ///     Disable to prevent most debug logs. Default is true.
         /// </summary>
         bool Verbose { get; set; }
+        
+        /// <summary>
+        ///     Cause delay in the simulator that matches transfer speeds. Default is true.
+        /// </summary>
+        bool SimulateTransferDelay { get; set; }
+        
+        /// <summary>
+        ///     Dump compressed images to LoadedImages folder when they get loaded. Default is false.
+        /// </summary>
+        bool WriteImagesToDisk { get; set; }
 
         /// <summary>
         ///     Get all images stored on the Unidice.

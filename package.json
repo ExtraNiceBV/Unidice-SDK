@@ -2,7 +2,7 @@
   "name": "com.unidice.sdk",
   "displayName": "Unidice SDK",
   "description": "The core plugin to connect with a Unidice or simulate one.",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.5",
   "unity": "2020.3",
   "license": "GNU General Public License v3.0",
   "repository": {

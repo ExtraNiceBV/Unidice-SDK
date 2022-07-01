@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,7 +17,7 @@ namespace Unidice.SDK.Unidice
     [Serializable]
     public class ImageDatabase : IImageDatabase
     {
-        public const int MAX_IMAGES = 80;
+        public const int MAX_IMAGES = 100;
         private static Color32 _clearColor = Color.black;
         private static Color32[] _pixelsClearTexture = new Color32[ImageSequence.IMAGE_PIXEL_SIZE * ImageSequence.IMAGE_PIXEL_SIZE].Select(c => _clearColor).ToArray();
         private static Material _blitBackgroundMaterial;
@@ -27,10 +28,10 @@ namespace Unidice.SDK.Unidice
         private Dictionary<Texture2D, Hash128> _hashes; // Texture => image hash
         private Dictionary<Hash128, Texture2D> _images; // Image hash => texture
 
-        public int EncodeQuality { get; set; } = 75;
+        public bool WriteImagesToDisk { get; set; }
+        public bool SimulateTransferDelay { get; set; } = true;
         public bool Verbose { get; set; } = true;
         public int Count { get; private set; }
-        public int BytesInUse { get; private set; }
         public bool Busy { get; private set; }
 
         private readonly List<int> _operationQueue = new List<int>(); // Stores ids for sync requests
@@ -269,19 +270,28 @@ namespace Unidice.SDK.Unidice
 
         private async UniTask PushToDevice(int index, Texture2D texture, ImageSequence sequence, CancellationToken cancellationToken)
         {
-            var data = texture.EncodeToJPG(EncodeQuality);
+            var data = texture.EncodeToJPG(sequence.EncodeQuality);
 
             // Decode for display purposes
             var success = texture.LoadImage(data, false);
             Debug.Assert(success, $"Failed to decode texture {texture.name} again.", texture);
 
+            if (WriteImagesToDisk)
+            {
+                if (!Directory.Exists($"{Application.dataPath}/../LoadedImages")) Directory.CreateDirectory($"{Application.dataPath}/../LoadedImages");
+                File.WriteAllBytes($"{Application.dataPath}/../LoadedImages/{texture.name}.jpg", data);
+            }
+
             loadedImages[index] = texture;
 
             var size = data.Length;
-            BytesInUse += size;
 
             // Add to device
-            await UniTask.Delay(TimeSpan.FromSeconds(0.05f), cancellationToken: cancellationToken);
+            if (SimulateTransferDelay)
+            {
+                await UniTask.Delay(TimeSpan.FromMilliseconds(100), cancellationToken: cancellationToken); // Overhead
+                await UniTask.Delay(TimeSpan.FromSeconds((size / 1024f) / 20), cancellationToken: cancellationToken); // Transfer duration
+            }
 
             if(Verbose)
                 Debug.Log($"Loaded {texture.name} at index {index} as part of sequence {sequence.name}. Size: {(size/1024f):F2}kb".Colored(Color.gray));
@@ -325,18 +335,16 @@ namespace Unidice.SDK.Unidice
                 if (usedBy.Count == 0)
                 {
                     // Delete from device
-                    await UniTask.Delay(TimeSpan.FromSeconds(0.01f), cancellationToken: cancellationToken);
+					if (SimulateTransferDelay)
+                    {
+						await UniTask.Delay(TimeSpan.FromMilliseconds(40), cancellationToken: cancellationToken); // Overhead
+					}
 
                     // No longer in use
                     foreach (var pair in _indices.ToArray())
                     {
                         if (pair.Value == index) _indices.Remove(pair.Key);
                     }
-
-                    // Update usage; TODO: Do this smarter later
-                    var data = loadedImages[index].EncodeToJPG(EncodeQuality);
-                    var size = data.Length;
-                    BytesInUse -= size;
 
                     if (Verbose)
                         Debug.Log($"Unloaded image {loadedImages[index].name} at index {index}. (no longer in use)".Colored(Color.gray));

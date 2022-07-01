@@ -7,7 +7,7 @@ namespace Unidice.SDK.Unidice
     [CreateAssetMenu(menuName = "Unidice/Image Sequence")]
     public class ImageSequence : ScriptableObject
     {
-        public static ImageSequence Create(string name, Texture2D[] animation, Texture2D[] backgroundLayers = null, Texture2D[] overlayLayers = null, LoopMode loop = LoopMode.Loop, int fps = 12)
+        public static ImageSequence Create(string name, Texture2D[] animation, Texture2D[] backgroundLayers = null, Texture2D[] overlayLayers = null, LoopMode loop = LoopMode.Loop, int fps = 12, float quality = 0.5f)
         {
             var obj = CreateInstance<ImageSequence>();
             obj.name = name;
@@ -16,6 +16,7 @@ namespace Unidice.SDK.Unidice
             obj.overlayLayers = overlayLayers ?? Array.Empty<Texture2D>();
             obj.loop = loop;
             obj.fps = fps;
+            obj.quality = quality;
             return obj;
         }
 
@@ -33,6 +34,7 @@ namespace Unidice.SDK.Unidice
         [SerializeField] private Texture2D[] animation;
         [SerializeField] private Texture2D[] overlayLayers;
         [SerializeField] private float fps = 12;
+        [SerializeField, Range(0, 1)] private float quality = 0.5f;
         [SerializeField] private LoopMode loop;
 
         public IReadOnlyList<Texture2D> BackgroundLayers => backgroundLayers;
@@ -42,5 +44,7 @@ namespace Unidice.SDK.Unidice
         public LoopMode Loop => loop;
         [field: NonSerialized] public IReadOnlyList<int> Indices { get; internal set; }
         [field: NonSerialized] public IReadOnlyList<Texture2D> Frames { get; internal set; }
+
+        public int EncodeQuality => (int)(quality * 100);
     }
 }
