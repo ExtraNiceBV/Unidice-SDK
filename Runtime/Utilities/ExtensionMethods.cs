@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using UnityEngine;
-using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -387,17 +386,6 @@ namespace Unidice.SDK.Utilities
             system.Play(true);
         }
 
-        public static void AddOnetimeListener(this UnityEvent e, UnityAction call)
-        {
-            e.AddListener(OnCalled);
-
-            void OnCalled()
-            {
-                e.RemoveListener(OnCalled);
-                call.Invoke();
-            }
-        }
-
         public static IEnumerable<T> PadRight<T>(this IEnumerable<T> source, int length, T toAdd)
         {
             int i = 0;
@@ -408,6 +396,18 @@ namespace Unidice.SDK.Utilities
                 i++;
             }
             for (; i < length; i++) yield return toAdd;
+        }
+
+        public static IEnumerable<T> Do<T>(this IEnumerable<T> sequence, Action<T> action)
+        {
+            if (sequence == null) yield break;
+            var enumerator = sequence.GetEnumerator();
+            while (enumerator.MoveNext())
+            {
+                action(enumerator.Current);
+                yield return enumerator.Current;
+            }
+            enumerator.Dispose();
         }
     }
 }
