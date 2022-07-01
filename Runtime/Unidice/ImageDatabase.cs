@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Unidice.SDK.Utilities;
 using UnityEngine;
@@ -26,7 +27,10 @@ namespace Unidice.SDK.Unidice
         private Dictionary<Texture2D, Hash128> _hashes; // Texture => image hash
         private Dictionary<Hash128, Texture2D> _images; // Image hash => texture
 
+        public int EncodeQuality { get; set; } = 75;
+        public bool Verbose { get; set; } = true;
         public int Count { get; private set; }
+        public int BytesInUse { get; private set; }
         public bool Busy { get; private set; }
 
         private readonly List<int> _operationQueue = new List<int>(); // Stores ids for sync requests
@@ -68,7 +72,8 @@ namespace Unidice.SDK.Unidice
 
             if (_operationQueue.Count > 1) // including new id
             {
-                Debug.Log($"Waiting for {_operationQueue.First()} to finish...");
+                if (Verbose)
+                    Debug.Log($"Waiting for {_operationQueue.First()} to finish...");
                 progress?.Report(0);
                 await OnOperationFinished.GetAsyncEventHandler(cancellationToken)
                     .OnInvokeAsync(); // After synchronization is complete, run it again
@@ -138,7 +143,8 @@ namespace Unidice.SDK.Unidice
                     var frame = unloadableFrames[0];
                     var index = _indices[frame];
                     var unloadableSequences = _usage[index];
-                    Debug.Log($"To unload {frame.name}, we have to unload the following sequences:\n{unloadableSequences.Select(s => s.name).Aggregate((a, b) => $"{a}\n{b}")}");
+                    if(Verbose)
+                        Debug.Log($"To unload {frame.name}, we have to unload the following sequences:\n{unloadableSequences.Select(s => s.name).Aggregate((a, b) => $"{a}\n{b}")}");
                     unload.AddRangeArray(unloadableSequences);
                     unloadableFrames.Remove(frame);
                     count++;
@@ -244,12 +250,8 @@ namespace Unidice.SDK.Unidice
                 if (!_indices.TryGetValue(frame, out var index))
                 {
                     index = Array.IndexOf(loadedImages, null);
-                    loadedImages[index] = frame;
-            
-                    // Add to device
-                    await UniTask.Delay(TimeSpan.FromSeconds(0.05f), cancellationToken: cancellationToken);
-                    //Debug.Log($"Loaded {image.name} at index {index} as part of sequence {sequence.name}.".Colored(Color.gray));
-            
+                    await PushToDevice(index, frame, sequence, cancellationToken);
+
                     _indices.Add(frame, index);
                     Count++;
                 }
@@ -263,6 +265,26 @@ namespace Unidice.SDK.Unidice
             sequence.Indices = indices;
 
             Busy = false;
+        }
+
+        private async UniTask PushToDevice(int index, Texture2D texture, ImageSequence sequence, CancellationToken cancellationToken)
+        {
+            var data = texture.EncodeToJPG(EncodeQuality);
+
+            // Decode for display purposes
+            var success = texture.LoadImage(data, false);
+            Debug.Assert(success, $"Failed to decode texture {texture.name} again.", texture);
+
+            loadedImages[index] = texture;
+
+            var size = data.Length;
+            BytesInUse += size;
+
+            // Add to device
+            await UniTask.Delay(TimeSpan.FromSeconds(0.05f), cancellationToken: cancellationToken);
+
+            if(Verbose)
+                Debug.Log($"Loaded {texture.name} at index {index} as part of sequence {sequence.name}. Size: {(size/1024f):F2}kb".Colored(Color.gray));
         }
 
         public IEnumerable<Texture2D> GetImages()
@@ -311,7 +333,13 @@ namespace Unidice.SDK.Unidice
                         if (pair.Value == index) _indices.Remove(pair.Key);
                     }
 
-                    Debug.Log($"Unloaded image {loadedImages[index].name} at index {index}. (no longer in use)".Colored(Color.gray));
+                    // Update usage; TODO: Do this smarter later
+                    var data = loadedImages[index].EncodeToJPG(EncodeQuality);
+                    var size = data.Length;
+                    BytesInUse -= size;
+
+                    if (Verbose)
+                        Debug.Log($"Unloaded image {loadedImages[index].name} at index {index}. (no longer in use)".Colored(Color.gray));
                     loadedImages[index] = null;
                     Count--;
                 }
