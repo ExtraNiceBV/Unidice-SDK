@@ -7,7 +7,7 @@ namespace Unidice.SDK.Unidice
     [CreateAssetMenu(menuName = "Unidice/Image Sequence")]
     public class ImageSequence : ScriptableObject
     {
-        public static ImageSequence Create(string name, Texture2D[] animation, Texture2D[] backgroundLayers = null, Texture2D[] overlayLayers = null, LoopMode loop = LoopMode.Loop, int fps = 12, float quality = 0.5f)
+        public static ImageSequence Create(string name, Texture2D[] animation, Texture2D[] backgroundLayers = null, Texture2D[] overlayLayers = null, LoopMode loop = LoopMode.Loop, float fps = 12, float quality = 0.5f)
         {
             var obj = CreateInstance<ImageSequence>();
             obj.name = name;
