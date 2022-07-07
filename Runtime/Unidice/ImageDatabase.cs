@@ -10,6 +10,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Profiling;
+using static TMPro.SpriteAssetUtilities.TexturePacker_JsonArray;
 using Random = UnityEngine.Random;
 
 namespace Unidice.SDK.Unidice
@@ -25,7 +26,6 @@ namespace Unidice.SDK.Unidice
         [SerializeField] private Texture2D[] loadedImages;
         private Dictionary<Texture2D, int> _indices; // Texture hash => image index
         private List<ImageSequence>[] _usage; // for each image index, a list of sequences that use the image
-        private Dictionary<Texture2D, Hash128> _hashes; // Texture => image hash
         private Dictionary<Hash128, Texture2D> _images; // Image hash => texture
 
         public bool WriteImagesToDisk { get; set; }
@@ -184,21 +184,14 @@ namespace Unidice.SDK.Unidice
                 // Render texture
                 var frame = RenderFrame(sequence, image);
 
-                // Compute hash if needed
-                if (!_hashes.TryGetValue(frame, out var hash))
-                {
-                    HashUtilities.ComputeHash128(frame.GetRawTextureData(), ref hash);
-                    _hashes.Add(frame, hash);
-                }
-
                 // Check if texture has been created before (and use that one)
-                if (_images.TryGetValue(hash, out var hashedTexture))
+                if (_images.TryGetValue(frame.imageContentsHash, out var hashedTexture))
                 {
                     frame = hashedTexture;
                 }
                 else
                 {
-                    _images.Add(hash, frame);
+                    _images.Add(frame.imageContentsHash, frame);
                 }
 
                 frames[i] = frame;
@@ -309,7 +302,6 @@ namespace Unidice.SDK.Unidice
             loadedImages = new Texture2D[MAX_IMAGES];
             _usage = new List<ImageSequence>[MAX_IMAGES];
             _indices = new Dictionary<Texture2D, int>(MAX_IMAGES);
-            _hashes = new Dictionary<Texture2D, Hash128>(MAX_IMAGES);
             _images = new Dictionary<Hash128, Texture2D>(MAX_IMAGES);
         }
 
@@ -441,6 +433,12 @@ namespace Unidice.SDK.Unidice
             var marginY = ImageSequence.IMAGE_PIXEL_SIZE / 2 - newHeight / 2;
             nTex.ReadPixels(new Rect(0, 0, newWidth, newHeight), marginX, marginY);
             nTex.Apply();
+
+            // Compute hash
+            var hash = new Hash128();
+            HashUtilities.ComputeHash128(nTex.GetRawTextureData(), ref hash);
+            nTex.imageContentsHash = hash;
+
             RenderTexture.active = null;
             RenderTexture.ReleaseTemporary(rt);
             return nTex;
