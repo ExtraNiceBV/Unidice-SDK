@@ -3,14 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Unidice.SDK.Utilities;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Profiling;
-using static TMPro.SpriteAssetUtilities.TexturePacker_JsonArray;
 using Random = UnityEngine.Random;
 
 namespace Unidice.SDK.Unidice
@@ -21,9 +19,9 @@ namespace Unidice.SDK.Unidice
         public const int MAX_IMAGES = 100;
         private static Color32 _clearColor = Color.black;
         private static Color32[] _pixelsClearTexture = new Color32[ImageSequence.IMAGE_PIXEL_SIZE * ImageSequence.IMAGE_PIXEL_SIZE].Select(c => _clearColor).ToArray();
-        private static Material _blitBackgroundMaterial;
-        private static Material _blitLayerMaterial;
         [SerializeField] private Texture2D[] loadedImages;
+        [SerializeField] private Material _blitBackgroundMaterial;
+        [SerializeField] private Material _blitLayerMaterial;
         private Dictionary<Texture2D, int> _indices; // Texture hash => image index
         private List<ImageSequence>[] _usage; // for each image index, a list of sequences that use the image
         private Dictionary<Hash128, Texture2D> _images; // Image hash => texture
@@ -297,8 +295,6 @@ namespace Unidice.SDK.Unidice
 
         public void Initialize()
         {
-            _blitBackgroundMaterial = new Material(Shader.Find("Shader Graphs/UnidiceBlitBackground"));
-            _blitLayerMaterial = new Material(Shader.Find("Shader Graphs/UnidiceBlitLayer"));
             loadedImages = new Texture2D[MAX_IMAGES];
             _usage = new List<ImageSequence>[MAX_IMAGES];
             _indices = new Dictionary<Texture2D, int>(MAX_IMAGES);
@@ -405,7 +401,7 @@ namespace Unidice.SDK.Unidice
             return stack;
         }
 
-        private static Texture2D Convert(Texture2D[] stack, int newWidth, int newHeight)
+        private Texture2D Convert(Texture2D[] stack, int newWidth, int newHeight)
         {
             var rt = RenderTexture.GetTemporary(newWidth, newHeight, 16, GraphicsFormat.R8G8B8A8_SRGB, 8);
             rt.filterMode = FilterMode.Bilinear;
