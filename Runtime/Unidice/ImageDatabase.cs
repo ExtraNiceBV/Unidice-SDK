@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Profiling;
+using UnityEngine.Rendering;
 using Random = UnityEngine.Random;
 
 namespace Unidice.SDK.Unidice
@@ -16,12 +17,19 @@ namespace Unidice.SDK.Unidice
     [Serializable]
     public class ImageDatabase : IImageDatabase
     {
+        [Serializable]
+        public class BlitMaterials
+        {
+            public Material materialBackground;
+            public Material materialLayer;
+        }
+
         public const int MAX_IMAGES = 100;
         private static Color32 _clearColor = Color.black;
         private static Color32[] _pixelsClearTexture = new Color32[ImageSequence.IMAGE_PIXEL_SIZE * ImageSequence.IMAGE_PIXEL_SIZE].Select(c => _clearColor).ToArray();
         [SerializeField] private Texture2D[] loadedImages;
-        [SerializeField] private Material _blitBackgroundMaterial;
-        [SerializeField] private Material _blitLayerMaterial;
+        [SerializeField] private BlitMaterials blitURP10;
+        [SerializeField] private BlitMaterials blitURP12;
         private Dictionary<Texture2D, int> _indices; // Texture hash => image index
         private List<ImageSequence>[] _usage; // for each image index, a list of sequences that use the image
         private Dictionary<Hash128, Texture2D> _images; // Image hash => texture
@@ -361,27 +369,6 @@ namespace Unidice.SDK.Unidice
             return isReadable;
         }
 
-        private Hash128 CalcHash(Texture2D[] stack)
-        {
-            var hash = new Hash128();
-            foreach (var item in stack)
-            {
-                var inHash = new Hash128();
-                HashUtilities.ComputeHash128(item.GetRawTextureData(), ref inHash);
-                if (!hash.isValid) hash = inHash;
-                else HashUtilities.AppendHash(ref inHash, ref hash);
-            }
-
-            return hash;
-        }
-
-        private Hash128 CalcHash(Texture2D texture)
-        {
-            var hash = new Hash128();
-            HashUtilities.ComputeHash128(texture.GetRawTextureData(), ref hash);
-            return hash;
-        }
-
         private Texture2D[] GetStack(ImageSequence sequence, Texture2D image)
         {
             // Concatenate all backgroundLayers, the image, and then all overlayLayers
@@ -403,6 +390,7 @@ namespace Unidice.SDK.Unidice
 
         private Texture2D Convert(Texture2D[] stack, int newWidth, int newHeight)
         {
+            var materials = GetBlitMaterials();
             var rt = RenderTexture.GetTemporary(newWidth, newHeight, 16, GraphicsFormat.R8G8B8A8_SRGB, 8);
             rt.filterMode = FilterMode.Bilinear;
             RenderTexture.active = rt;
@@ -417,12 +405,12 @@ namespace Unidice.SDK.Unidice
             foreach (var source in stack)
                 if (first)
                 {
-                    Graphics.Blit(source, rt, _blitBackgroundMaterial);
+                    Blit(source, rt, materials.materialBackground);
                     first = false;
                 }
                 else
                 {
-                    Graphics.Blit(source, rt, _blitLayerMaterial);
+                    Blit(source, rt, materials.materialLayer);   
                 }
 
             var marginX = ImageSequence.IMAGE_PIXEL_SIZE / 2 - newWidth / 2;
@@ -438,6 +426,28 @@ namespace Unidice.SDK.Unidice
             RenderTexture.active = null;
             RenderTexture.ReleaseTemporary(rt);
             return nTex;
+        }
+
+        private BlitMaterials GetBlitMaterials()
+        {
+#if UNITY_2021_3_OR_NEWER
+            return blitURP12;
+#else
+            return blitURP10;
+#endif
+        }
+
+        private void Blit(Texture2D source, RenderTexture rt, Material material)
+        {
+#if UNITY_2021_1_OR_NEWER
+            var cmd = CommandBufferPool.Get();
+            Blitter.BlitCameraTexture(cmd, m_CameraColorTarget, m_CameraColorTarget, m_Material, 0);
+            context.ExecuteCommandBuffer(cmd);
+            cmd.Clear();
+            CommandBufferPool.Release(cmd);
+#else
+            Graphics.Blit(source, rt, material);
+#endif
         }
 
         public Texture2D GetTexture(int index)
