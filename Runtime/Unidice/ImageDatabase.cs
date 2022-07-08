@@ -17,19 +17,11 @@ namespace Unidice.SDK.Unidice
     [Serializable]
     public class ImageDatabase : IImageDatabase
     {
-        [Serializable]
-        public class BlitMaterials
-        {
-            public Material materialBackground;
-            public Material materialLayer;
-        }
-
         public const int MAX_IMAGES = 100;
         private static Color32 _clearColor = Color.black;
         private static Color32[] _pixelsClearTexture = new Color32[ImageSequence.IMAGE_PIXEL_SIZE * ImageSequence.IMAGE_PIXEL_SIZE].Select(c => _clearColor).ToArray();
         [SerializeField] private Texture2D[] loadedImages;
-        [SerializeField] private BlitMaterials blitURP10;
-        [SerializeField] private BlitMaterials blitURP12;
+        [SerializeField] private Material materialBlit;
         private Dictionary<Texture2D, int> _indices; // Texture hash => image index
         private List<ImageSequence>[] _usage; // for each image index, a list of sequences that use the image
         private Dictionary<Hash128, Texture2D> _images; // Image hash => texture
@@ -390,7 +382,6 @@ namespace Unidice.SDK.Unidice
 
         private Texture2D Convert(Texture2D[] stack, int newWidth, int newHeight)
         {
-            var materials = GetBlitMaterials();
             var rt = RenderTexture.GetTemporary(newWidth, newHeight, 16, GraphicsFormat.R8G8B8A8_SRGB, 8);
             rt.filterMode = FilterMode.Bilinear;
             RenderTexture.active = rt;
@@ -401,16 +392,17 @@ namespace Unidice.SDK.Unidice
             nTex.anisoLevel = 4;
             nTex.filterMode = FilterMode.Bilinear;
             nTex.wrapMode = TextureWrapMode.Clamp;
+            GL.Clear(true, true, Color.black);
             var first = true;
             foreach (var source in stack)
                 if (first)
                 {
-                    Blit(source, rt, materials.materialBackground);
+                    Graphics.Blit(source, rt, materialBlit);
                     first = false;
                 }
                 else
                 {
-                    Blit(source, rt, materials.materialLayer);   
+                    Graphics.Blit(source, rt, materialBlit);   
                 }
 
             var marginX = ImageSequence.IMAGE_PIXEL_SIZE / 2 - newWidth / 2;
@@ -426,28 +418,6 @@ namespace Unidice.SDK.Unidice
             RenderTexture.active = null;
             RenderTexture.ReleaseTemporary(rt);
             return nTex;
-        }
-
-        private BlitMaterials GetBlitMaterials()
-        {
-#if UNITY_2021_3_OR_NEWER
-            return blitURP12;
-#else
-            return blitURP10;
-#endif
-        }
-
-        private void Blit(Texture2D source, RenderTexture rt, Material material)
-        {
-#if UNITY_2021_1_OR_NEWER
-            var cmd = CommandBufferPool.Get();
-            Blitter.BlitCameraTexture(cmd, m_CameraColorTarget, m_CameraColorTarget, m_Material, 0);
-            context.ExecuteCommandBuffer(cmd);
-            cmd.Clear();
-            CommandBufferPool.Release(cmd);
-#else
-            Graphics.Blit(source, rt, material);
-#endif
         }
 
         public Texture2D GetTexture(int index)
