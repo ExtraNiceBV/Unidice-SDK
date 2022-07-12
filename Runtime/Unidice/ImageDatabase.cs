@@ -9,7 +9,6 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Profiling;
-using UnityEngine.Rendering;
 using Random = UnityEngine.Random;
 
 namespace Unidice.SDK.Unidice
@@ -142,7 +141,7 @@ namespace Unidice.SDK.Unidice
                     var frame = unloadableFrames[0];
                     var index = _indices[frame];
                     var unloadableSequences = _usage[index];
-                    if(Verbose)
+                    if (Verbose)
                         Debug.Log($"To unload {frame.name}, we have to unload the following sequences:\n{unloadableSequences.Select(s => s.name).Aggregate((a, b) => $"{a}\n{b}")}");
                     unload.AddRangeArray(unloadableSequences);
                     unloadableFrames.Remove(frame);
@@ -155,12 +154,12 @@ namespace Unidice.SDK.Unidice
 
             foreach (var sequence in unload)
             {
-                await UnloadSequence(sequence, Progress.Create<float>(p => progress?.Report((i + p) / total *2/3)), cancellationToken);
+                await UnloadSequence(sequence, Progress.Create<float>(p => progress?.Report((i + p) / total * 2 / 3)), cancellationToken);
                 i++;
             }
             foreach (var sequence in toLoad)
             {
-                await LoadSequence(sequence, Progress.Create<float>(p => progress?.Report((i + p) / total *2/3)), cancellationToken);
+                await LoadSequence(sequence, Progress.Create<float>(p => progress?.Report((i + p) / total * 2 / 3)), cancellationToken);
                 i++;
             }
 
@@ -237,7 +236,7 @@ namespace Unidice.SDK.Unidice
             foreach (var frame in sequence.Frames)
             {
                 if (!frame) Debug.LogError($"Frame is null in sequence {sequence.name}.");
-            
+
 
                 if (!_indices.TryGetValue(frame, out var index))
                 {
@@ -249,7 +248,7 @@ namespace Unidice.SDK.Unidice
                 }
                 if (_usage[index] == null) _usage[index] = new List<ImageSequence> { sequence };
                 else _usage[index].Add(sequence);
-            
+
                 indices[i++] = index;
                 progress?.Report((float)i / amount);
             }
@@ -276,16 +275,20 @@ namespace Unidice.SDK.Unidice
             loadedImages[index] = texture;
 
             var size = data.Length;
+            float duration = 0;
 
             // Add to device
             if (SimulateTransferDelay)
             {
-                await UniTask.Delay(TimeSpan.FromMilliseconds(100), cancellationToken: cancellationToken); // Overhead
-                await UniTask.Delay(TimeSpan.FromSeconds((size / 1024f) / 20), cancellationToken: cancellationToken); // Transfer duration
+                const float bytePerSecond = 1024f * 20;
+                float overhead = 0.1f;
+                float transfer = size / bytePerSecond;
+                duration = overhead + transfer;
+                await UniTask.Delay(TimeSpan.FromSeconds(duration), cancellationToken: cancellationToken);
             }
 
-            if(Verbose)
-                Debug.Log($"Loaded {texture.name} at index {index} as part of sequence {sequence.name}. Size: {(size/1024f):F2}kb".Colored(Color.gray));
+            if (Verbose)
+                Debug.Log($"Loaded {texture.name} at index {index} as part of sequence {sequence.name}. Size: {size / 1024f:F2}kb Duration: {duration:F1}s".Colored(Color.gray));
         }
 
         public IEnumerable<Texture2D> GetImages()
@@ -323,10 +326,10 @@ namespace Unidice.SDK.Unidice
                 if (usedBy.Count == 0)
                 {
                     // Delete from device
-					if (SimulateTransferDelay)
+                    if (SimulateTransferDelay)
                     {
-						await UniTask.Delay(TimeSpan.FromMilliseconds(40), cancellationToken: cancellationToken); // Overhead
-					}
+                        await UniTask.Delay(TimeSpan.FromMilliseconds(40), cancellationToken: cancellationToken); // Overhead
+                    }
 
                     // No longer in use
                     foreach (var pair in _indices.ToArray())
@@ -402,7 +405,7 @@ namespace Unidice.SDK.Unidice
                 }
                 else
                 {
-                    Graphics.Blit(source, rt, materialBlit);   
+                    Graphics.Blit(source, rt, materialBlit);
                 }
 
             var marginX = ImageSequence.IMAGE_PIXEL_SIZE / 2 - newWidth / 2;
