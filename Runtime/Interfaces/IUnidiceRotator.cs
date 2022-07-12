@@ -6,6 +6,7 @@ namespace Unidice.SDK.Interfaces
     {
         UnityEvent OnRotated { get; }
         UnityEvent OnRolled { get; }
+        UnityEvent OnShake { get; }
         UnityEvent OnStartedRolling { get; }
         bool RollInSecret { get; set; }
     }

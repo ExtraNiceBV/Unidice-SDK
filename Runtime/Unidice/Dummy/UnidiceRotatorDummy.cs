@@ -9,6 +9,8 @@ namespace Unidice.SDK.Unidice.Dummy
 
         public UnityEvent OnRolled { get; } = new UnityEvent();
 
+        public UnityEvent OnShake { get; } = new UnityEvent();
+
         public UnityEvent OnStartedRolling { get; } = new UnityEvent();
 
         public bool RollInSecret { get; set; }
