@@ -108,7 +108,7 @@ namespace Unidice.SDK.Unidice
             // This is fairly expensive, but okay if called sparingly
             foreach (var sequence in toRender)
             {
-                await RenderSequence(sequence, Progress.Create<float>(p => progress?.Report((i + p) / toRender.Length / 3)), cancellationToken);
+                await RenderSequence(sequence, Progress.Create<float>(p => progress?.Report((i + p) / toRender.Length / 4)), cancellationToken);
                 i++;
                 if (i % 5 == 0) await UniTask.Yield(cancellationToken);
             }
@@ -154,12 +154,12 @@ namespace Unidice.SDK.Unidice
 
             foreach (var sequence in unload)
             {
-                await UnloadSequence(sequence, Progress.Create<float>(p => progress?.Report((i + p) / total * 2 / 3)), cancellationToken);
+                await UnloadSequence(sequence, Progress.Create<float>(p => progress?.Report(1 / 4f + (i + p) / total * 3 / 4)), cancellationToken);
                 i++;
             }
             foreach (var sequence in toLoad)
             {
-                await LoadSequence(sequence, Progress.Create<float>(p => progress?.Report((i + p) / total * 2 / 3)), cancellationToken);
+                await LoadSequence(sequence, Progress.Create<float>(p => progress?.Report(1 / 4f + (i + p) / total * 3 / 4)), cancellationToken);
                 i++;
             }
 
