@@ -271,7 +271,7 @@ namespace Unidice.SDK.Unidice
             if (WriteImagesToDisk)
             {
                 if (!Directory.Exists($"{Application.dataPath}/../LoadedImages")) Directory.CreateDirectory($"{Application.dataPath}/../LoadedImages");
-                File.WriteAllBytes($"{Application.dataPath}/../LoadedImages/{texture.name}.jpg", data);
+                File.WriteAllBytes($"{Application.dataPath}/../LoadedImages/{index:D3} {texture.name}.jpg", data);
             }
 
             loadedImages[index] = texture;
