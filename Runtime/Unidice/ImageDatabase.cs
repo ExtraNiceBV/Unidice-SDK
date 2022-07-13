@@ -24,6 +24,7 @@ namespace Unidice.SDK.Unidice
         private Dictionary<Texture2D, int> _indices; // Texture hash => image index
         private List<ImageSequence>[] _usage; // for each image index, a list of sequences that use the image
         private Dictionary<Hash128, Texture2D> _images; // Image hash => texture
+        private Dictionary<Texture2D, Hash128> _hashes; // Texture => image hash
 
         public bool WriteImagesToDisk { get; set; }
         public bool SimulateTransferDelay { get; set; } = true;
@@ -180,15 +181,16 @@ namespace Unidice.SDK.Unidice
 
                 // Render texture
                 var frame = RenderFrame(sequence, image);
+                var hash = _hashes[frame];
 
                 // Check if texture has been created before (and use that one)
-                if (_images.TryGetValue(frame.imageContentsHash, out var hashedTexture))
+                if (_images.TryGetValue(hash, out var hashedTexture))
                 {
                     frame = hashedTexture;
                 }
                 else
                 {
-                    _images.Add(frame.imageContentsHash, frame);
+                    _images.Add(hash, frame);
                 }
 
                 frames[i] = frame;
@@ -302,6 +304,7 @@ namespace Unidice.SDK.Unidice
             _usage = new List<ImageSequence>[MAX_IMAGES];
             _indices = new Dictionary<Texture2D, int>(MAX_IMAGES);
             _images = new Dictionary<Hash128, Texture2D>(MAX_IMAGES);
+            _hashes = new Dictionary<Texture2D, Hash128>(MAX_IMAGES);
         }
 
         private async UniTask UnloadSequence(ImageSequence sequence, IProgress<float> progress, CancellationToken cancellationToken)
@@ -416,7 +419,7 @@ namespace Unidice.SDK.Unidice
             // Compute hash
             var hash = new Hash128();
             HashUtilities.ComputeHash128(nTex.GetRawTextureData(), ref hash);
-            nTex.imageContentsHash = hash;
+            _hashes.Add(nTex, hash);
 
             RenderTexture.active = null;
             RenderTexture.ReleaseTemporary(rt);
