@@ -41,7 +41,7 @@ namespace Unidice.SDK.Unidice
         public IReadOnlyList<Texture2D> BackgroundLayers => backgroundLayers;
         public IReadOnlyList<Texture2D> Animation => animation;
         public IReadOnlyList<Texture2D> OverlayLayers => overlayLayers;
-        public float FPS => MathF.Min(fps, MAX_FPS);
+        public float FPS => Mathf.Min(fps, MAX_FPS);
         public LoopMode Loop => loop;
         [field: NonSerialized] public IReadOnlyList<int> Indices { get; internal set; }
         [field: NonSerialized] public IReadOnlyList<Texture2D> Frames { get; internal set; }
