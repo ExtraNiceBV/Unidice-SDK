@@ -16,11 +16,12 @@ namespace Unidice.SDK.Unidice
     [Serializable]
     public class ImageDatabase : IImageDatabase
     {
+        // Don't expose any references; this class is also used by the UnidiceWrapper, and references will then be broken.
         public const int MAX_IMAGES = 100;
         private static Color32 _clearColor = Color.black;
         private static Color32[] _pixelsClearTexture = new Color32[ImageSequence.IMAGE_PIXEL_SIZE * ImageSequence.IMAGE_PIXEL_SIZE].Select(c => _clearColor).ToArray();
         [SerializeField] private Texture2D[] loadedImages;
-        [SerializeField] private Material materialBlit;
+        private Material _materialBlit;
         private Dictionary<Texture2D, int> _indices; // Texture hash => image index
         private List<ImageSequence>[] _usage; // for each image index, a list of sequences that use the image
         private Dictionary<Hash128, Texture2D> _images; // Image hash => texture
@@ -305,6 +306,7 @@ namespace Unidice.SDK.Unidice
             _indices = new Dictionary<Texture2D, int>(MAX_IMAGES);
             _images = new Dictionary<Hash128, Texture2D>(MAX_IMAGES);
             _hashes = new Dictionary<Texture2D, Hash128>(MAX_IMAGES);
+            _materialBlit = new Material(Shader.Find("Sprites/Default"));
         }
 
         private async UniTask UnloadSequence(ImageSequence sequence, IProgress<float> progress, CancellationToken cancellationToken)
@@ -400,15 +402,20 @@ namespace Unidice.SDK.Unidice
             nTex.wrapMode = TextureWrapMode.Clamp;
             GL.Clear(true, true, Color.black);
             var first = true;
+            if (!_materialBlit)
+            {
+                Debug.LogWarning("Unidice: materialBlit is missing. Didn't initialize?");
+                return null;
+            }
             foreach (var source in stack)
                 if (first)
                 {
-                    Graphics.Blit(source, rt, materialBlit);
+                    Graphics.Blit(source, rt, _materialBlit);
                     first = false;
                 }
                 else
                 {
-                    Graphics.Blit(source, rt, materialBlit);
+                    Graphics.Blit(source, rt, _materialBlit);
                 }
 
             var marginX = ImageSequence.IMAGE_PIXEL_SIZE / 2 - newWidth / 2;

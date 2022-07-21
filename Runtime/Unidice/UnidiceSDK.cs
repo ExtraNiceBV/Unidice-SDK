@@ -1,6 +1,5 @@
 ﻿using Unidice.SDK.Interfaces;
 using Unidice.SDK.Unidice.Dummy;
-using UnityEngine;
 using Object = UnityEngine.Object;
 
 namespace Unidice.SDK.Unidice
@@ -9,13 +8,15 @@ namespace Unidice.SDK.Unidice
     {
         public static IUnidice GetUnidice()
         {
-            var stub = Object.FindObjectOfType<UnidiceStub>();
+            var stub = Object.FindObjectOfType<UnidiceStub>(); // This tries to find the simulator
             if (stub) return stub.GetUnidice();
 
-            Debug.LogWarning("Implement once SDK is available."); // TODO: Apploader should check if unidice is connected and if not, load the simulator.
-            return UnidiceDummy;
+            // TODO: Apploader should check if unidice is connected and if not, load the simulator.
+            return UnidiceWrapper ??= new UnidiceWrapper();
+            return UnidiceDummy ??= new UnidiceDummy();
         }
 
-        public static IUnidice UnidiceDummy { get; } = new UnidiceDummy();
+        public static IUnidice UnidiceWrapper { get; private set; }
+        public static IUnidice UnidiceDummy { get; private set; }
     }
 }

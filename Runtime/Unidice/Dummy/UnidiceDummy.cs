@@ -1,4 +1,5 @@
 ﻿using Unidice.SDK.Interfaces;
+using UnityEngine;
 
 namespace Unidice.SDK.Unidice.Dummy
 {
@@ -6,6 +7,7 @@ namespace Unidice.SDK.Unidice.Dummy
     {
         public UnidiceDummy()
         {
+            Debug.LogWarning("Running with Unidice Dummy!");
             var images = new ImageDatabase();
             images.Initialize();
             Images = images;
